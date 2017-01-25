@@ -1,0 +1,79 @@
+﻿@model Report
+@{
+    ViewData["Title"] = Model.Name;
+
+    bool debug = (bool)ViewData["Debug"];
+    bool force = (bool)ViewData["Force"];
+
+    string url = Url.Action("Raw", "Reports", new { category = Model.Category.ToLower(), name = Model.Url, force = force || debug });
+}
+
+<img class="loading" src="/libraries/loading.gif" />
+<iframe id="report-frame" src="@url"></iframe>
+
+@if (!debug)
+{
+    IEnumerable<Report> reports = ViewData["Reports"] as IEnumerable<Report>;
+    List<Report> categoryReports = reports.Where(r => r.Category == Model.Category).ToList();
+
+    int index = (categoryReports.IndexOf(Model) + 1) % categoryReports.Count;
+    Report nextReport = categoryReports[index];
+
+    string nextUrl = Url.Action("Show", "Reports", new { category = nextReport.Category.ToLower(), name = nextReport.Url });
+
+<script>
+
+    function dispatchIFrameEvents(iframe)
+    {
+        // Save any previous onmousemove handler
+        var existingOnMouseMove = iframe.contentWindow.onmousemove;
+
+        // Attach a new onmousemove listener
+        iframe.contentWindow.onmousemove = function (e)
+        {
+            // Fire any existing onmousemove listener 
+            if (existingOnMouseMove) existingOnMouseMove(e);
+
+            // Create a new event for the this window
+            var evt = document.createEvent("MouseEvents");
+
+            // We'll need this to offset the mouse move appropriately
+            var boundingClientRect = iframe.getBoundingClientRect();
+
+            // Initialize the event, copying exiting event values for the most part
+            evt.initMouseEvent("mousemove",
+                true, // bubbles
+                false, // not cancelable 
+                window, e.detail, e.screenX, e.screenY, e.clientX + boundingClientRect.left, e.clientY + boundingClientRect.top, e.ctrlKey, e.altKey, e.shiftKey, e.metaKey, e.button,
+                null // no related element
+            );
+
+            // Dispatch the mousemove event on the iframe element
+            iframe.dispatchEvent(evt);
+        };
+    }
+
+    var timer;
+    var nextPage = "@nextUrl";
+
+    window.onload = resetTimer;
+
+    // Reset on page action
+    document.onmousemove = resetTimer;
+
+    // Dispatch frame events to window
+    var iframe = document.getElementById("report-frame");
+    dispatchIFrameEvents(iframe);
+
+    function idle()
+    {
+        location.href = nextPage;
+    }
+
+    function resetTimer()
+    {
+        clearTimeout(timer);
+        timer = setTimeout(idle, 20000);
+    }
+</script>
+}
