@@ -13,7 +13,7 @@ namespace Rboard.Controllers
     {
         public ReportService ReportService { get; }
 
-        public ReportsController(RService rService, ReportService reportService)
+        public ReportsController(ReportService reportService)
         {
             ReportService = reportService;
         }

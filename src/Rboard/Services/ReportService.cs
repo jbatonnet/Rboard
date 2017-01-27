@@ -144,22 +144,15 @@ namespace Rboard.Services
                     if (!ArchiveDirectory.Exists)
                         ArchiveDirectory.Create();
 
-                    FileStream archiveStream;
-                    ZipArchive archive;
-
                     if (!archiveInfo.Exists)
                     {
-                        archiveStream = archiveInfo.Create();
-                        archive = new ZipArchive(archiveStream, ZipArchiveMode.Create);
+                        using (FileStream archiveStream = archiveInfo.Create())
+                        using (ZipArchive archive = new ZipArchive(archiveStream, ZipArchiveMode.Create))
+                            archive.ToString();
                     }
-                    else
-                    {
-                        archiveStream = archiveInfo.Open(FileMode.Open);
-                        archive = new ZipArchive(archiveStream, ZipArchiveMode.Update);
-                    }
-                    
-                    using (archiveStream)
-                    using (archive)
+
+                    using (FileStream archiveStream = archiveInfo.Open(FileMode.Open))
+                    using (ZipArchive archive = new ZipArchive(archiveStream, ZipArchiveMode.Update))
                     {
                         string reportArchiveName;
 

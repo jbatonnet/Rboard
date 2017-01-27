@@ -13,7 +13,7 @@ namespace Rboard.Controllers
     {
         public IActionResult Download(string path, string category = null)
         {
-            return Redirect("/assets/" + path);
+            return RedirectPermanent("/assets/" + path);
         }
     }
 }
