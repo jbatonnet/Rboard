@@ -54,6 +54,19 @@ namespace Rboard.Services
 
             return rExecutable;
         }
+        public string GetPandocExecutablePath()
+        {
+            string pandocExecutable = Environment
+                .GetEnvironmentVariable("PATH")
+                .Split(';')
+                .Select(p => Path.Combine(p, "pandoc.exe"))
+                .FirstOrDefault(p => File.Exists(p));
+
+            if (pandocExecutable == null)
+                throw new FileNotFoundException("Could not find Pandoc executable path");
+
+            return pandocExecutable;
+        }
 
         public bool IsPackageInstalled(string packageName)
         {
@@ -69,19 +82,24 @@ namespace Rboard.Services
             {
                 foreach (string package in RPackages)
                 {
-                    string arguments = string.Format("-e \"if (!('{0}' %in% rownames(installed.packages()))) install.packages('{0}')\"", package);
+                    string arguments = string.Format("-e \"if (!('{0}' %in% rownames(installed.packages()))) install.packages('{0}', repos='http://cran.rstudio.com/')\"", package);
 
                     ProcessStartInfo processStartInfo = new ProcessStartInfo(rExecutable, arguments)
                     {
                         UseShellExecute = false,
-                        CreateNoWindow = true
+                        CreateNoWindow = true,
+                        RedirectStandardError = true,
+                        RedirectStandardOutput = true,
                     };
 
                     Process process = Process.Start(processStartInfo);
                     process.WaitForExit();
 
                     if (process.ExitCode != 0)
-                        throw new Exception("Error while installing package " + package);
+                    {
+                        string error = process.StandardError.ReadToEnd();
+                        throw new Exception("Error while installing package " + package + ": " + error);
+                    }
                 }
             });
         }
@@ -93,11 +111,13 @@ namespace Rboard.Services
 
             return Task.Run(() =>
             {
+                string pandocExecutable = GetPandocExecutablePath();
                 string rExecutable = GetRExecutablePath();
 
-                string generationParameters = string.Format("-e \"rmarkdown::render('{0}', output_file = '{1}', quiet = TRUE)\"",
+                string generationParameters = string.Format("-e \"Sys.setenv(RSTUDIO_PANDOC = '{2}')\" -e \"rmarkdown::render('{0}', output_file = '{1}', quiet = TRUE)\"",
                     sourcePath.Replace("\\", "\\\\"),
-                    destinationPath.Replace("\\", "\\\\"));
+                    destinationPath.Replace("\\", "\\\\"),
+                    Path.GetDirectoryName(pandocExecutable).Replace("\\", "\\\\"));
 
                 ProcessStartInfo processStartInfo = new ProcessStartInfo(rExecutable, generationParameters)
                 {

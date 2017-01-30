@@ -21,6 +21,7 @@ namespace Rboard.Services
                 return reportCategories.SelectMany(p => p.Value);
             }
         }
+        public DirectoryInfo ReportsBaseDirectory { get; private set; } = new DirectoryInfo(".");
         public DirectoryInfo ArchiveDirectory { get; private set; } = new DirectoryInfo("Archives");
 
         internal IConfiguration Configuration { get; }
@@ -71,13 +72,13 @@ namespace Rboard.Services
                 report.Category = category;
                 report.Name = Path.GetFileNameWithoutExtension(path);
                 report.Url = url;
-                report.Path = path;
+                report.Path = Path.IsPathRooted(path) ? path : Path.Combine(ReportsBaseDirectory.FullName, path);
 
                 if (refreshTime != null) report.RefreshTime = ParseTime(refreshTime);
                 if (archiveTime != null) report.ArchiveTime = ParseTime(archiveTime);
                 if (deleteTime != null) report.DeleteTime = ParseTime(deleteTime);
 
-                using (StreamReader reader = new StreamReader(path))
+                using (StreamReader reader = new StreamReader(report.Path))
                 {
                     string line = reader.ReadLine();
 
@@ -261,8 +262,11 @@ namespace Rboard.Services
                 IConfigurationSection reportsSection = Configuration.GetSection("Reports");
                 if (reportsSection != null)
                 {
-                    reportCategories.Clear();
+                    IConfigurationSection baseDirectorySection = reportsSection.GetSection("BaseDirectory");
+                    if (baseDirectorySection != null)
+                        ReportsBaseDirectory = new DirectoryInfo(baseDirectorySection.Value);
 
+                    reportCategories.Clear();
                     foreach (IConfigurationSection categorySection in reportsSection.GetChildren())
                     {
                         string category = categorySection.Key;
