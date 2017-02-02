@@ -10,7 +10,6 @@ namespace Rboard.Model
     public class Report
     {
         public string Path { get; set; }
-        public string Url { get; set; }
 
         public string Name { get; set; }
         public string Category { get; set; }

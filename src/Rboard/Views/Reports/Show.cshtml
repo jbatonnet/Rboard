@@ -2,45 +2,71 @@
 @{
     ViewData["Title"] = Model.Name;
 
-    bool debug = (bool)ViewData["Debug"];
+    SlideshowMode slideshowMode = (SlideshowMode)ViewData["SlideshowMode"];
+    TimeSpan slideshowTime = (TimeSpan)ViewData["SlideshowTime"];
+
+    bool debugMode = (bool)ViewData["DebugMode"];
+    bool pauseMode = (bool)ViewData["PauseMode"];
     bool force = (bool)ViewData["Force"];
 
-    string url = Url.Action("Raw", "Reports", new { category = Model.Category.ToLower(), name = Model.Url, force = force || debug });
+    string url = Url.Action("Raw", "Reports", new { category = Model.Category.ToLower(), name = Model.GetUrl(), force = force || debugMode });
 }
 
 <img class="loading" src="/libraries/loading.gif" />
 <iframe id="report-frame" src="@url"></iframe>
 
-@if (!debug)
+@if (!debugMode && !pauseMode && slideshowMode != SlideshowMode.Disabled)
 {
-    IEnumerable<Report> reports = ViewData["Reports"] as IEnumerable<Report>;
-    List<Report> categoryReports = reports.Where(r => r.Category == Model.Category).ToList();
+    List<Report> allReports = (ViewData["Reports"] as IEnumerable<Report>).ToList();
+    List<string> categories = allReports.Select(r => r.Category).Distinct().ToList();
 
-    int index = (categoryReports.IndexOf(Model) + 1) % categoryReports.Count;
-    Report nextReport = categoryReports[index];
+    Report nextReport = null;
 
-    string nextUrl = Url.Action("Show", "Reports", new { category = nextReport.Category.ToLower(), name = nextReport.Url });
+    switch (slideshowMode)
+    {
+        case SlideshowMode.AllReports:
+        {
+            int index = (allReports.IndexOf(Model) + 1) % allReports.Count;
+            nextReport = allReports[index];
+
+            break;
+        }
+
+        case SlideshowMode.CategoryReports:
+        {
+            List<Report> categoryReports = allReports.Where(r => r.Category == Model.Category).ToList();
+
+            int index = (categoryReports.IndexOf(Model) + 1) % categoryReports.Count;
+            nextReport = categoryReports[index];
+
+            break;
+        }
+
+        case SlideshowMode.FirstReports:
+        {
+            int index = (categories.IndexOf(Model.Category) + 1) % categories.Count;
+            string category = categories[index];
+            nextReport = allReports.Where(r => r.Category == category).First();
+
+            break;
+        }
+    }
+
+    string nextUrl = Url.Action("Show", "Reports", new { category = nextReport.Category.ToLower(), name = nextReport.GetUrl() });
 
 <script>
-
     function dispatchIFrameEvents(iframe)
     {
-        // Save any previous onmousemove handler
         var existingOnMouseMove = iframe.contentWindow.onmousemove;
 
-        // Attach a new onmousemove listener
         iframe.contentWindow.onmousemove = function (e)
         {
-            // Fire any existing onmousemove listener 
-            if (existingOnMouseMove) existingOnMouseMove(e);
+            if (existingOnMouseMove)
+                existingOnMouseMove(e);
 
-            // Create a new event for the this window
             var evt = document.createEvent("MouseEvents");
-
-            // We'll need this to offset the mouse move appropriately
             var boundingClientRect = iframe.getBoundingClientRect();
 
-            // Initialize the event, copying exiting event values for the most part
             evt.initMouseEvent("mousemove",
                 true, // bubbles
                 false, // not cancelable 
@@ -48,7 +74,6 @@
                 null // no related element
             );
 
-            // Dispatch the mousemove event on the iframe element
             iframe.dispatchEvent(evt);
         };
     }
@@ -57,11 +82,8 @@
     var nextPage = "@nextUrl";
 
     window.onload = resetTimer;
-
-    // Reset on page action
     document.onmousemove = resetTimer;
 
-    // Dispatch frame events to window
     var iframe = document.getElementById("report-frame");
     dispatchIFrameEvents(iframe);
 
@@ -73,7 +95,7 @@
     function resetTimer()
     {
         clearTimeout(timer);
-        timer = setTimeout(idle, 20000);
+        timer = setTimeout(idle, @((int)slideshowTime.TotalMilliseconds));
     }
 </script>
 }

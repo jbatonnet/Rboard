@@ -30,10 +30,11 @@ namespace Rboard
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddSingleton<IConfiguration>(Configuration);
+            services.AddSingleton<IConfigurationRoot>(Configuration);
 
             // Add framework services.
             services.AddMvc();
+            services.AddSession();
 
             // Add reporting services.
             services.AddSingleton<RService>();
@@ -56,19 +57,32 @@ namespace Rboard
                 app.UseExceptionHandler("/Home/Error");
             }
 
+            app.UseSession();
+
             app.UseStaticFiles();
             app.UseStaticFiles("/assets");
             app.UseStaticFiles("/libraries");
 
             app.UseMvc(routes =>
             {
-                routes.MapRoute("Reports", "reports/{category}/{name}.html", new { controller = "Reports", action = "Raw" });
-                routes.MapRoute("Archives", "archives/{category}/{name}.html", new { controller = "Archives", action = "Raw" });
-                routes.MapRoute("Pages", "{category}/{name}.html", new { controller = "Reports", action = "Show" });
+                // Main URLs
+                routes.MapRoute("Reports", "{category}/{name}.html", new { controller = "Reports", action = "Show" });
+                routes.MapRoute("Archives", "archives/{category}/{name}_{date}.html", new { controller = "Archives", action = "Show" });
 
-                routes.MapRoute("Reports.Files", "reports/{category}/libraries/{*path}", new { controller = "Files", action = "Download" });
-                routes.MapRoute("Archives.Files", "archives/{category}/libraries/{*path}", new { controller = "Files", action = "Download" });
-                routes.MapRoute("Pages.Files", "{category}/libraries/{*path}", new { controller = "Files", action = "Download" });
+                // Raw reports
+                routes.MapRoute("Reports.Raw", "raw/{category}/{name}.html", new { controller = "Reports", action = "Raw" });
+                routes.MapRoute("Archives.Raw", "raw/archives/{category}/{name}_{date}.html", new { controller = "Archives", action = "Raw" });
+
+                // Actions
+                routes.MapRoute("Reports.ToggleDebug", "reports/debug/{category}/{name}.html", new { controller = "Reports", action = "ToggleDebug" });
+                routes.MapRoute("Reports.TogglePause", "reports/pause/{category}/{name}.html", new { controller = "Reports", action = "TogglePause" });
+                routes.MapRoute("Reports.ForceReload", "reports/reload/{category}/{name}.html", new { controller = "Reports", action = "ForceReload" });
+
+                // Assets
+                routes.MapRoute("Reports.Assets", "{category}/libraries/{*path}", new { controller = "Files", action = "Download" });
+                routes.MapRoute("Archives.Assets", "archives/{category}/libraries/{*path}", new { controller = "Files", action = "Download" });
+                routes.MapRoute("Reports.Raw.Assets", "raw/{category}/libraries/{*path}", new { controller = "Files", action = "Download" });
+                routes.MapRoute("Archives.Raw.Assets", "raw/archives/{category}/libraries/{*path}", new { controller = "Files", action = "Download" });
 
                 routes.MapRoute("Index", "", new { controller = "Reports", action = "Index" });
             });

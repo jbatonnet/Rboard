@@ -13,13 +13,13 @@ namespace Rboard.Services
         public string RExecutable { get; private set; }
         public string[] RPackages { get; private set; }
 
-        internal IConfiguration Configuration { get; }
+        internal IConfigurationRoot Configuration { get; }
 
         private Task reloadTask;
         private Task packageInstallationTask;
         private object renderLock = new object();
 
-        public RService(IConfiguration configuration)
+        public RService(IConfigurationRoot configuration)
         {
             Configuration = configuration;
 

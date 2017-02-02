@@ -1,16 +1,5 @@
 ﻿@{ 
-    IEnumerable<Report> reports = ViewData["Reports"] as IEnumerable<Report>;
-
-    Dictionary<string, Report[]> reportCategories = reports
-        .GroupBy(r => r.Category)
-        .ToDictionary(g => g.Key, g => g.ToArray());
-
-    bool release = true;
-    bool? debug = ViewData["Debug"] as bool?;
-
-#if DEBUG
-    release = false;
-#endif
+    bool? debugMode = ViewData["DebugMode"] as bool?;
 }
 
 <!DOCTYPE html>
@@ -74,7 +63,7 @@
                     </span>
                     <span class="navbar-brand">
                         Rboard
-                        @if (debug == true)
+                        @if (debugMode == true)
                         {
                             WriteLiteral(" (Debug)");
                         }
@@ -84,48 +73,7 @@
 
                 </div>
                 <div id="navbar" class="navbar-collapse collapse">
-                    <ul class="nav navbar-nav navbar-left">
-                        @foreach (var category in reportCategories)
-                        {
-                            <li class="dropdown">
-                                <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">@category.Key <span class="caret"></span></a>
-                                <ul class="dropdown-menu">
-                                    @foreach (Report report in category.Value)
-                                    {
-                                        if (debug == true)
-                                        {
-                                            <li><a asp-controller="Reports" asp-action="Show" asp-route-category="@category.Key.ToLower()" asp-route-name="@report.Url" asp-route-debug="true">@report.Name</a></li>
-                                        }
-                                        else
-                                        {
-                                            <li><a asp-controller="Reports" asp-action="Show" asp-route-category="@category.Key.ToLower()" asp-route-name="@report.Url">@report.Name</a></li>
-                                        }
-                                    }
-                                </ul>
-                            </li>
-                        }
-                    </ul>
-                    <ul class="nav navbar-nav navbar-right">
-                        @if (!release)
-                        {
-                            if (debug == true)
-                            {
-                                <li><a href="?"><i style="font-size: 18px" class="fa fa-bug"></i></a></li>
-                            }
-                            else
-                            {
-                                <li><a href="?debug=true"><i style="font-size: 18px" class="fa fa-bug"></i></a></li>
-                            }
-                        }
-                        @if (debug == true)
-                        {
-                            <li><a href="?debug=true"><i style="font-size: 18px" class="fa fa-refresh"></i></a></li>
-                        }
-                        else
-                        {
-                            <li><a href="?force=true"><i style="font-size: 18px" class="fa fa-refresh"></i></a></li>
-                        }
-                    </ul>
+                    @Html.Partial("Navbar")
                 </div>
             </div>
         </div>

@@ -1,0 +1,12 @@
+﻿@model Report
+@{
+    ViewData["Title"] = Model.Name;
+
+    DateTime archiveDate = (DateTime)ViewData["ArchiveDate"];
+
+    string urlArchiveDate = Utils.FormatDateTime(archiveDate, "yyyy-MM-dd", "yyyy-MM-dd_HH-mm");
+    string url = Url.Action("Raw", "Archives", new { category = Model.Category.ToLower(), name = Model.GetUrl(), date = urlArchiveDate });
+}
+
+<img class="loading" src="/libraries/loading.gif" />
+<iframe id="report-frame" src="@url"></iframe>

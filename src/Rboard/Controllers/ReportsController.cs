@@ -3,39 +3,104 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using Rboard.Model;
 using System.IO;
 using Rboard.Services;
+using Microsoft.Extensions.Configuration;
 
 namespace Rboard.Controllers
 {
-    public class ReportsController : Controller
+    public enum SlideshowMode
     {
-        public ReportService ReportService { get; }
+        Disabled,
+        AllReports,
+        FirstReports,
+        CategoryReports
+    }
 
-        public ReportsController(ReportService reportService)
+    public class ReportsController : BaseController
+    {
+        public SlideshowMode SlideshowMode { get; private set; } = SlideshowMode.AllReports;
+        public TimeSpan SlideshowTime { get; private set; } = TimeSpan.FromSeconds(20);
+
+        public bool DebugMode
         {
-            ReportService = reportService;
+            get
+            {
+                return HttpContext.Session.GetInt32(nameof(DebugMode)) == 1;
+            }
+            set
+            {
+                HttpContext.Session.SetInt32(nameof(DebugMode), value ? 1 : 0);
+            }
+        }
+        public bool PauseMode
+        {
+            get
+            {
+                return HttpContext.Session.GetInt32(nameof(PauseMode)) == 1;
+            }
+            set
+            {
+                HttpContext.Session.SetInt32(nameof(PauseMode), value ? 1 : 0);
+            }
+        }
+
+        internal IConfigurationRoot Configuration { get; }
+
+        private Task reloadTask;
+
+        public ReportsController(IConfigurationRoot configuration, ReportService reportService) : base(reportService)
+        {
+            Configuration = configuration;
+
+            Configuration.GetReloadToken().RegisterChangeCallback(s => reloadTask = ReloadConfiguration(), null);
+            reloadTask = ReloadConfiguration();
         }
 
         public IActionResult Index()
         {
             Report firstReport = ReportService.Reports.First();
-            return RedirectToAction(nameof(Show), new { category = firstReport.Category.ToLower(), name = firstReport.Url });
+
+            return RedirectToAction(nameof(Show), new { category = firstReport.Category.ToLower(), name = firstReport.GetUrl() });
         }
 
-        public IActionResult Show(string category, string name, [FromQuery]bool debug = false, [FromQuery]bool force = false)
+        public IActionResult TogglePause(string category, string name)
+        {
+            PauseMode = !PauseMode;
+
+            return RedirectToAction(nameof(Show), new { category = category, name = name });
+        }
+        public IActionResult ToggleDebug(string category, string name)
+        {
+            DebugMode = !DebugMode;
+
+            return RedirectToAction(nameof(Show), new { category = category, name = name });
+        }
+        public async Task<IActionResult> ForceReload(string category, string name)
+        {
+            await ReportService.ReloadReports();
+
+            return RedirectToAction(nameof(Show), new { category = category, name = name, force = true });
+        }
+
+        public IActionResult Show(string category, string name, [FromQuery]bool force = false)
         {
             // Try to find the requested report
             Report report = ReportService.FindReport(category, name);
             if (report == null)
                 return NotFound("Could not find the specified report");
 
-            ViewData["Debug"] = debug;
-            ViewData["Force"] = force;
-            ViewData["Reports"] = ReportService.Reports;
+            ViewData["SlideshowMode"] = SlideshowMode;
+            ViewData["SlideshowTime"] = SlideshowTime;
 
-            return View(report);
+            ViewData["DebugMode"] = DebugMode;
+            ViewData["PauseMode"] = PauseMode;
+
+            ViewData["Force"] = force;
+
+            return base.Show(report);
         }
         public IActionResult Raw(string category, string name, [FromQuery]bool force = false)
         {
@@ -70,6 +135,24 @@ namespace Rboard.Controllers
                 using (StreamReader reader = new StreamReader(generatedReport))
                     return Content(reader.ReadToEnd(), "text/html");
             }
+        }
+
+        private Task ReloadConfiguration()
+        {
+            return Task.Run(() =>
+            {
+                IConfigurationSection reportsSection = Configuration.GetSection("Rboard");
+                if (reportsSection != null)
+                {
+                    IConfigurationSection slideshowModeSection = reportsSection.GetSection(nameof(SlideshowMode));
+                    if (slideshowModeSection?.Value != null)
+                        SlideshowMode = (SlideshowMode)Enum.Parse(typeof(SlideshowMode), slideshowModeSection.Value);
+
+                    IConfigurationSection slideshowTimeSection = reportsSection.GetSection(nameof(SlideshowTime));
+                    if (slideshowTimeSection?.Value != null)
+                        SlideshowTime = Utils.ParseTime(slideshowTimeSection.Value);
+                }
+            });
         }
     }
 }
