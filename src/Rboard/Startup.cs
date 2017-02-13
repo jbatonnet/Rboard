@@ -1,14 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Builder;
+﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Rboard.Model;
+
 using Rboard.Services;
 
 namespace Rboard
@@ -34,7 +29,6 @@ namespace Rboard
 
             // Add framework services.
             services.AddMvc();
-            services.AddSession();
 
             // Add reporting services.
             services.AddSingleton<RService>();
@@ -56,8 +50,6 @@ namespace Rboard
             {
                 app.UseExceptionHandler("/Home/Error");
             }
-
-            app.UseSession();
 
             app.UseStaticFiles();
             app.UseStaticFiles("/assets");

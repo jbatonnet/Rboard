@@ -1,21 +1,22 @@
-﻿using Microsoft.Extensions.Configuration;
-using Rboard.Model;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 
+using Microsoft.Extensions.Configuration;
+
+using Rboard.Model;
+
 namespace Rboard.Services
 {
     public class ReportService
     {
         private static readonly Regex ArchiveRegex = new Regex(@"^Archive_(?<Date>[0-9_-]+).zip$", RegexOptions.Compiled);
-        private static readonly Regex ReportArchiveRegex = new Regex(@"_(?<Date>[0-9_-]+).html$", RegexOptions.Compiled);
+        private static readonly Regex ReportArchiveRegex = new Regex(@"^(?<Name>.*)_(?<Date>[0-9_-]+).html$", RegexOptions.Compiled);
 
         public IEnumerable<Report> Reports
         {
@@ -48,7 +49,7 @@ namespace Rboard.Services
         public Task ReloadReports()
         {
             Configuration.Reload();
-            return reloadTask;
+            return reloadTask = ReloadConfiguration();
         }
 
         public Report FindReport(string name)
@@ -147,36 +148,7 @@ namespace Rboard.Services
                 DateTime newArchiveDate = Utils.RoundDateTime(now, report.ArchiveTime);
 
                 if (newArchiveDate != oldArchiveDate)
-                {
-                    string archiveName = GetArchiveName(oldArchiveDate);
-                    FileInfo archiveInfo = new FileInfo(Path.Combine(ArchiveDirectory.FullName, archiveName));
-
-                    if (!ArchiveDirectory.Exists)
-                        ArchiveDirectory.Create();
-
-                    if (!archiveInfo.Exists)
-                    {
-                        using (FileStream archiveStream = archiveInfo.Create())
-                        using (ZipArchive archive = new ZipArchive(archiveStream, ZipArchiveMode.Create))
-                            archive.ToString();
-                    }
-
-                    using (FileStream archiveStream = archiveInfo.Open(FileMode.Open))
-                    using (ZipArchive archive = new ZipArchive(archiveStream, ZipArchiveMode.Update))
-                    {
-                        string reportArchiveName = report.GetArchivedReportName(oldArchiveDate);
-
-                        ZipArchiveEntry reportArchiveEntry = archive.GetEntry(reportArchiveName);
-                        if (reportArchiveEntry == null)
-                        {
-                            reportArchiveEntry = archive.CreateEntry(reportArchiveName, CompressionLevel.Optimal);
-
-                            using (FileStream reportStream = generatedReportInfo.OpenRead())
-                            using (Stream reportArchiveStream = reportArchiveEntry.Open())
-                                reportStream.CopyTo(reportArchiveStream);
-                        }
-                    }
-                }
+                    ArchiveReport(report).Wait();
             }
 
             // Check if generation is needed
@@ -259,10 +231,65 @@ namespace Rboard.Services
             return generationTask;
         }
 
+        private async Task ArchiveReport(Report report)
+        {
+            reloadTask.Wait();
+
+            await Task.Run(() =>
+            {
+                FileInfo reportInfo = new FileInfo(report.Path);
+                FileInfo generatedReportInfo = new FileInfo(Path.Combine(reportInfo.Directory.FullName, report.GetGeneratedReportName()));
+
+                DateTime now = DateTime.Now;
+
+                // Check if archiving is needed
+                if (generatedReportInfo.Exists)
+                {
+                    DateTime oldArchiveDate = Utils.RoundDateTime(generatedReportInfo.LastWriteTime, report.ArchiveTime);
+                    DateTime newArchiveDate = Utils.RoundDateTime(now, report.ArchiveTime);
+
+                    if (newArchiveDate != oldArchiveDate)
+                    {
+                        string archiveName = GetArchiveName(oldArchiveDate);
+                        FileInfo archiveInfo = new FileInfo(Path.Combine(ArchiveDirectory.FullName, archiveName));
+
+                        if (!ArchiveDirectory.Exists)
+                            ArchiveDirectory.Create();
+
+                        if (!archiveInfo.Exists)
+                        {
+                            using (FileStream archiveStream = archiveInfo.Create())
+                            using (ZipArchive archive = new ZipArchive(archiveStream, ZipArchiveMode.Create))
+                                archive.ToString();
+                        }
+
+                        using (FileStream archiveStream = archiveInfo.Open(FileMode.Open))
+                        using (ZipArchive archive = new ZipArchive(archiveStream, ZipArchiveMode.Update))
+                        {
+                            string reportArchiveName = report.GetArchivedReportName(oldArchiveDate);
+
+                            ZipArchiveEntry reportArchiveEntry = archive.GetEntry(reportArchiveName);
+                            if (reportArchiveEntry == null)
+                            {
+                                reportArchiveEntry = archive.CreateEntry(reportArchiveName, CompressionLevel.Optimal);
+
+                                using (FileStream reportStream = generatedReportInfo.OpenRead())
+                                using (Stream reportArchiveStream = reportArchiveEntry.Open())
+                                    reportStream.CopyTo(reportArchiveStream);
+                            }
+                        }
+                    }
+                }
+            });
+
+            await CleanArchives(report);
+        }
         public Task CleanArchives(Report report)
         {
             return Task.Run(() =>
             {
+                DateTime deleteTime = DateTime.Now - report.DeleteTime;
+
                 FileInfo[] archivesInfo = ArchiveDirectory.GetFiles();
                 foreach (FileInfo archiveInfo in archivesInfo)
                 {
@@ -274,7 +301,38 @@ namespace Rboard.Services
                     if (!DateTime.TryParse(archiveName.Groups["Date"].Value, out archiveDate))
                         continue;
 
+                    if (archiveDate > deleteTime.Date)
+                        continue;
 
+                    bool deleteArchive = false;
+
+                    using (FileStream archiveStream = archiveInfo.Open(FileMode.Open))
+                    using (ZipArchive archive = new ZipArchive(archiveStream, ZipArchiveMode.Update))
+                    {
+                        foreach (ZipArchiveEntry archiveEntry in archive.Entries.ToArray())
+                        {
+                            Match reportArchiveName = ReportArchiveRegex.Match(archiveEntry.Name);
+                            if (!reportArchiveName.Success)
+                                continue;
+
+                            DateTime reportArchiveDate;
+                            if (!DateTime.TryParse(reportArchiveName.Groups["Date"].Value, out reportArchiveDate))
+                                continue;
+
+                            if (reportArchiveDate > deleteTime)
+                                continue;
+
+                            if (archiveEntry.Name != report.GetArchivedReportName(reportArchiveDate))
+                                continue;
+
+                            archiveEntry.Delete();
+                        }
+
+                        deleteArchive = archive.Entries.Count == 0;
+                    }
+
+                    if (deleteArchive)
+                        archiveInfo.Delete();
                 }
             });
         }
@@ -354,8 +412,12 @@ namespace Rboard.Services
                     IConfigurationSection reportsDirectorySection = rboardSection.GetSection("ReportsDirectory");
                     if (reportsDirectorySection?.Value != null)
                         ReportsBaseDirectory = new DirectoryInfo(reportsDirectorySection.Value);
+
+                    IConfigurationSection archivesDirectory = rboardSection.GetSection("ArchivesDirectory");
+                    if (archivesDirectory?.Value != null)
+                        ArchiveDirectory = new DirectoryInfo(archivesDirectory.Value);
                 }
-                
+
                 IConfigurationSection reportsSection = Configuration.GetSection("Reports");
                 if (reportsSection != null)
                 {
@@ -386,7 +448,7 @@ namespace Rboard.Services
     {
         public static string GetUrl(this Report report)
         {
-            return report.Name.Replace(" ", "_").ToLower();
+            return report.Name.Replace(" ", "-").Replace("--", "-").Replace("--", "-").ToLower();
         }
 
         public static string GetGeneratedReportName(this Report report)

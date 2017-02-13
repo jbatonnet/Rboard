@@ -1,13 +1,13 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Http;
-using Rboard.Model;
-using System.IO;
-using Rboard.Services;
 using Microsoft.Extensions.Configuration;
+
+using Rboard.Model;
+using Rboard.Services;
 
 namespace Rboard.Controllers
 {
@@ -28,22 +28,36 @@ namespace Rboard.Controllers
         {
             get
             {
-                return HttpContext.Session.GetInt32(nameof(DebugMode)) == 1;
+                string debugMode = Request.Cookies[nameof(DebugMode)];
+
+#if DEBUG
+                if (debugMode == null)
+                    return false;
+#endif
+
+                return debugMode == "true";
             }
             set
             {
-                HttpContext.Session.SetInt32(nameof(DebugMode), value ? 1 : 0);
+                Response.Cookies.Append(nameof(DebugMode), value ? "true" : "false");
             }
         }
         public bool PauseMode
         {
             get
             {
-                return HttpContext.Session.GetInt32(nameof(PauseMode)) == 1;
+                string pauseMode = Request.Cookies[nameof(PauseMode)];
+
+#if DEBUG
+                if (pauseMode == null)
+                    return true;
+#endif
+
+                return pauseMode == "true";
             }
             set
             {
-                HttpContext.Session.SetInt32(nameof(PauseMode), value ? 1 : 0);
+                Response.Cookies.Append(nameof(PauseMode), value ? "true" : "false");
             }
         }
 
