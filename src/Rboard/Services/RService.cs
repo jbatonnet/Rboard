@@ -5,19 +5,24 @@ using System.Linq;
 using System.Threading.Tasks;
 
 using Microsoft.Extensions.Configuration;
+using Microsoft.Win32;
 
 namespace Rboard.Services
 {
     public class RService
     {
-        public string RExecutable { get; private set; }
-        public string[] RPackages { get; private set; }
+        public string RScriptExecutable { get; private set; } = "rscript";
+        public string PandocExecutable { get; private set; } = "pandoc";
+
+        public string[] RPackages { get; private set; } = new string[0];
 
         internal IConfigurationRoot Configuration { get; }
 
         private Task reloadTask;
         private Task packageInstallationTask;
+
         private object renderLock = new object();
+        private object installationLock = new object();
 
         public RService(IConfigurationRoot configuration)
         {
@@ -26,84 +31,177 @@ namespace Rboard.Services
             Configuration.GetReloadToken().RegisterChangeCallback(s => reloadTask = ReloadConfiguration(), null);
             reloadTask = ReloadConfiguration();
 
-            packageInstallationTask = InstallPackages(RPackages);
+            packageInstallationTask = Task.WhenAll(
+                InstallPackages("rmarkdown", "flexdashboard"),
+                InstallPackages(RPackages)
+            );
         }
 
-        public string GetRExecutablePath()
+        public string GetRScriptExecutablePath()
         {
             reloadTask.Wait();
 
-            string rExecutable = RExecutable;
+            string rScriptExecutable = RScriptExecutable;
 
-            if (File.Exists(rExecutable))
-                return rExecutable;
+            if (File.Exists(rScriptExecutable))
+                return rScriptExecutable;
 
-            string extension = Path.GetExtension(rExecutable);
-            if (extension == string.Empty)
-                rExecutable += ".exe";
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            {
+                string extension = Path.GetExtension(rScriptExecutable);
+                if (extension == string.Empty)
+                    rScriptExecutable += ".exe";
+            }
 
-            rExecutable = Environment
+            // Try to find it in the PATH
+            string rScriptPath = Environment
                 .GetEnvironmentVariable("PATH")
                 .Split(';')
-                .Where(p => !p.ToLower().Contains("houdini"))
-                .Select(p => Path.Combine(p, rExecutable))
+                .Where(p => !p.ToLower().Contains("houdini")) // Houdini also has an rscript binary
+                .Select(p => Path.Combine(p, rScriptExecutable))
                 .FirstOrDefault(p => File.Exists(p));
 
-            if (rExecutable == null)
-                throw new FileNotFoundException("Could not find R executable path");
+            if (rScriptPath != null)
+                return rScriptPath;
 
-            return rExecutable;
+            // Then try to find R in registry if available
+            try
+            {
+                RegistryKey key = Registry.LocalMachine.OpenSubKey(Environment.Is64BitProcess ? @"SOFTWARE\R-core\R64" : @"SOFTWARE\R-core\R");
+                if (key != null)
+                {
+                    string rPath = key.GetValue("InstallPath", null) as string;
+                    if (!string.IsNullOrEmpty(rPath))
+                    {
+                        rScriptPath = Path.Combine(rPath, "bin", rScriptExecutable);
+                        if (File.Exists(rScriptPath))
+                            return rScriptPath;
+                    }
+                }
+            }
+            catch { }
+
+            throw new FileNotFoundException("Could not find R executable path");
         }
         public string GetPandocExecutablePath()
         {
-            string pandocExecutable = Environment
+            reloadTask.Wait();
+
+            string pandocExecutable = PandocExecutable;
+
+            if (File.Exists(pandocExecutable))
+                return pandocExecutable;
+
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            {
+                string extension = Path.GetExtension(pandocExecutable);
+                if (extension == string.Empty)
+                    pandocExecutable += ".exe";
+            }
+
+            // Try to find pandoc in the PATH
+            string pandocPath = Environment
                 .GetEnvironmentVariable("PATH")
                 .Split(';')
-                .Select(p => Path.Combine(p, "pandoc.exe"))
+                .Select(p => Path.Combine(p, pandocExecutable))
                 .FirstOrDefault(p => File.Exists(p));
 
-            if (pandocExecutable == null)
-                throw new FileNotFoundException("Could not find Pandoc executable path");
+            if (pandocPath != null)
+                return pandocPath;
 
-            return pandocExecutable;
+            // Then try to find it in default install location
+            try
+            {
+                string programPath = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                if (!string.IsNullOrEmpty(programPath))
+                {
+                    pandocPath = Path.Combine(programPath, "Pandoc", pandocExecutable);
+                    if (File.Exists(pandocPath))
+                        return pandocPath;
+                }
+            }
+            catch { }
+
+            throw new FileNotFoundException("Could not find Pandoc executable path");
         }
 
         public bool IsPackageInstalled(string packageName)
         {
-            throw new NotImplementedException();
+            string rScriptExecutable = GetRScriptExecutablePath();
+            string arguments = $"-e \"if (!('{packageName}' %in% rownames(installed.packages()))) quit(save = 'no', status = -1)\"";
+
+            ProcessStartInfo processStartInfo = new ProcessStartInfo(rScriptExecutable, arguments)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+            };
+
+            lock (renderLock)
+            {
+                Process process = Process.Start(processStartInfo);
+                process.WaitForExit();
+
+                int exitCode = process.ExitCode;
+
+                if (exitCode == 0) return true;
+                if (exitCode == -1) return false;
+
+                string error = process.StandardError.ReadToEnd();
+                throw new Exception("Error while checking installed package " + packageName + ": " + error);
+            }
         }
         public Task InstallPackages(params string[] packageNames)
         {
+            if (packageNames == null || packageNames.Length == 0)
+                return Task.CompletedTask;
+
             reloadTask.Wait();
 
-            string rExecutable = GetRExecutablePath();
+            string rScriptExecutable = GetRScriptExecutablePath();
 
             return Task.Run(() =>
             {
-                foreach (string package in RPackages)
+                foreach (string packageName in packageNames)
                 {
-                    string arguments = string.Format("-e \"if (!('{0}' %in% rownames(installed.packages()))) install.packages('{0}', repos='http://cran.rstudio.com/')\"", package);
+                    if (IsPackageInstalled(packageName))
+                        continue;
 
-                    ProcessStartInfo processStartInfo = new ProcessStartInfo(rExecutable, arguments)
+                    lock (installationLock)
                     {
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardError = true,
-                        RedirectStandardOutput = true,
-                    };
+                        Console.WriteLine("[{0}] Installing package {1}", DateTime.Now.ToShortTimeString(), packageName);
 
-                    Process process = Process.Start(processStartInfo);
-                    process.WaitForExit();
+                        string arguments = $"-e \"if (!('{packageName}' %in% rownames(installed.packages()))) install.packages('{packageName}', repos='http://cran.rstudio.com/')\"";
 
-                    if (process.ExitCode != 0)
-                    {
-                        string error = process.StandardError.ReadToEnd();
-                        throw new Exception("Error while installing package " + package + ": " + error);
+                        ProcessStartInfo processStartInfo = new ProcessStartInfo(rScriptExecutable, arguments)
+                        {
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                            RedirectStandardError = true,
+                            RedirectStandardOutput = true,
+                        };
+
+                        Process process = Process.Start(processStartInfo);
+                        process.WaitForExit();
+
+                        if (process.ExitCode != 0)
+                        {
+                            string error = process.StandardError.ReadToEnd();
+                            throw new Exception("Error while installing package " + packageName + ": " + error);
+                        }
+
+                        Console.WriteLine("[{0}] Installed package {1}", DateTime.Now.ToShortTimeString(), packageName);
                     }
                 }
             });
         }
 
+        public void WaitUntilReady()
+        {
+            reloadTask.Wait();
+            packageInstallationTask.Wait();
+        }
         public Task Render(string sourcePath, string destinationPath)
         {
             reloadTask.Wait();
@@ -112,7 +210,7 @@ namespace Rboard.Services
             return Task.Run(() =>
             {
                 string pandocExecutable = GetPandocExecutablePath();
-                string rExecutable = GetRExecutablePath();
+                string rExecutable = GetRScriptExecutablePath();
 
                 string generationParameters = string.Format("-e \"Sys.setenv(RSTUDIO_PANDOC = '{2}')\" -e \"rmarkdown::render('{0}', output_file = '{1}', quiet = TRUE)\"",
                     sourcePath.Replace("\\", "\\\\"),
@@ -153,8 +251,12 @@ namespace Rboard.Services
                     {
                         switch (child.Key)
                         {
-                            case "Executable":
-                                RExecutable = child.Value;
+                            case "RScriptExecutable":
+                                RScriptExecutable = child.Value;
+                                break;
+
+                            case "PandocExecutable":
+                                PandocExecutable = child.Value;
                                 break;
 
                             case "Packages":

@@ -75,7 +75,9 @@ namespace Rboard.Controllers
 
         public IActionResult Index()
         {
-            Report firstReport = ReportService.Reports.First();
+            Report firstReport = ReportService.Reports.FirstOrDefault();
+            if (firstReport == null)
+                return View();
 
             return RedirectToAction(nameof(Show), new { category = firstReport.Category.ToLower(), name = firstReport.GetUrl() });
         }

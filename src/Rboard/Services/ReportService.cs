@@ -81,8 +81,8 @@ namespace Rboard.Services
                 Report report = new Report();
 
                 report.Category = category;
-                report.Name = name;
                 report.Path = Path.IsPathRooted(path) ? path : Path.Combine(ReportsBaseDirectory.FullName, path);
+                report.Name = name ?? Path.GetFileNameWithoutExtension(report.Path);
 
                 if (refreshTime != null) report.RefreshTime = Utils.ParseTime(refreshTime);
                 if (archiveTime != null) report.ArchiveTime = Utils.ParseTime(archiveTime);
@@ -173,6 +173,8 @@ namespace Rboard.Services
                 FileInfo reportInfo = new FileInfo(report.Path);
                 FileInfo cleanReportInfo = new FileInfo(Path.Combine(reportInfo.Directory.FullName, Path.ChangeExtension(reportInfo.Name.Replace(" ", "_"), ".g.Rmd")));
                 FileInfo generatedReportInfo = new FileInfo(Path.Combine(reportInfo.Directory.FullName, report.GetGeneratedReportName()));
+
+                RService.WaitUntilReady();
 
                 Console.WriteLine("[{0}] Generating report {1}", DateTime.Now.ToShortTimeString(), reportInfo.Name);
 
