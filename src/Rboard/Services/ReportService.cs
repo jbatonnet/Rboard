@@ -203,7 +203,9 @@ namespace Rboard.Services
                             writer.WriteLine("    orientation: {0}", report.Configuration["orientation"]);
 
                         writer.WriteLine("---");
-                        writer.WriteLine(line);
+
+                        if (line != "---")
+                            writer.WriteLine(line);
 
                         // Copy the file
                         while (!reader.EndOfStream)
