@@ -14,6 +14,7 @@ namespace Rboard.Controllers
     public enum SlideshowMode
     {
         Disabled,
+        SingleReport,
         AllReports,
         FirstReports,
         CategoryReports
@@ -21,7 +22,7 @@ namespace Rboard.Controllers
 
     public class ReportsController : BaseController
     {
-        public SlideshowMode SlideshowMode { get; private set; } = SlideshowMode.AllReports;
+        public SlideshowMode SlideshowMode { get; private set; } = SlideshowMode.SingleReport;
         public TimeSpan SlideshowTime { get; private set; } = TimeSpan.FromSeconds(20);
 
         public bool DebugMode

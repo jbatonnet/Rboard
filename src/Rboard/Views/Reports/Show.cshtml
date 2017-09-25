@@ -24,6 +24,12 @@
 
     switch (slideshowMode)
     {
+        case SlideshowMode.SingleReport:
+        {
+            nextReport = Model;
+            break;
+        }
+
         case SlideshowMode.AllReports:
         {
             int index = (allReports.IndexOf(Model) + 1) % allReports.Count;
