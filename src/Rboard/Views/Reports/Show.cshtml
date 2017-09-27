@@ -1,6 +1,6 @@
 ﻿@model Report
 @{
-    ViewData["Title"] = Model.Name;
+    ViewData["Title"] = Model.Category + " - " + Model.Name;
 
     SlideshowMode slideshowMode = (SlideshowMode)ViewData["SlideshowMode"];
     TimeSpan slideshowTime = (TimeSpan)ViewData["SlideshowTime"];

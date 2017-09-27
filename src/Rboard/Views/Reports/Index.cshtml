@@ -1,0 +1,33 @@
+﻿@model IEnumerable<Report>
+@{
+    Report[] reports = (ViewData["Reports"] as IEnumerable<Report>).ToArray();
+    string[] categories = reports.Select(r => r.Category).Distinct().ToArray();
+}
+
+<br />
+<br />
+
+<div class="container">
+
+    <div class="row-fluid">
+        @foreach (string category in categories)
+        {
+            Report[] categoryReports = reports.Where(r => r.Category == category).ToArray();
+
+
+            <blockquote>
+                <p class="lead">
+                    @category
+                </p>
+
+                <p>
+                    @foreach (Report report in categoryReports)
+                    {
+                        <a class="btn btn-primary" asp-controller="Reports" asp-action="Show" asp-route-category="@report.Category.ToLower()" asp-route-name="@report.GetUrl()">@report.Name</a>
+                    }
+                </p>
+            </blockquote>
+        }
+    </div>
+
+</div>

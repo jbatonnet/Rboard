@@ -76,11 +76,7 @@ namespace Rboard.Controllers
 
         public IActionResult Index()
         {
-            Report firstReport = ReportService.Reports.FirstOrDefault();
-            if (firstReport == null)
-                return View();
-
-            return RedirectToAction(nameof(Show), new { category = firstReport.Category.ToLower(), name = firstReport.GetUrl() });
+            return View();
         }
 
         public IActionResult TogglePause(string category, string name)
@@ -107,7 +103,7 @@ namespace Rboard.Controllers
             // Try to find the requested report
             Report report = ReportService.FindReport(category, name);
             if (report == null)
-                return NotFound("Could not find the specified report");
+                return RedirectToAction(nameof(Index));
 
             ViewData["SlideshowMode"] = SlideshowMode;
             ViewData["SlideshowTime"] = SlideshowTime;
@@ -124,8 +120,8 @@ namespace Rboard.Controllers
             // Try to find the requested report
             Report report = ReportService.FindReport(category, name);
             if (report == null)
-                return NotFound("Could not find the specified report");
-            
+                return RedirectToAction(nameof(Index));
+
             // Update the specified report
             Task<string> reportUpdateTask = ReportService.UpdateReport(report, force);
 

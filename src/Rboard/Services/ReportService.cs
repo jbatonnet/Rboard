@@ -222,6 +222,7 @@ namespace Rboard.Services
                 catch (Exception e)
                 {
                     Console.WriteLine("[{0}] Error while generating report {1}: {2}", DateTime.Now.ToShortTimeString(), reportInfo.Name, e);
+                    throw;
                 }
 
                 // Clean everything

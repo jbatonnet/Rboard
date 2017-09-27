@@ -8,7 +8,7 @@
         <meta charset="utf-8">
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 
-        <title>@ViewData["Title"] - Rboard</title>
+        <title>@(string.IsNullOrEmpty(ViewData["Title"]?.ToString()) ? "Rboard" : ViewData["Title"] + " - Rboard")</title>
 
         <script src="libraries/jquery-1.11.3/jquery.min.js"></script>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -61,15 +61,9 @@
                     <span class="navbar-logo pull-left">
 
                     </span>
-                    <span class="navbar-brand">
-                        Rboard
-                        @if (debugMode == true)
-                        {
-                            WriteLiteral(" (Debug)");
-                        }
-                        <span class="navbar-author">
-                        </span>
-                    </span>
+                    <a class="navbar-brand" href="/">
+                        @(debugMode == true ? "Rboard (Debug)" : "Rboard")
+                    </a>
 
                 </div>
                 <div id="navbar" class="navbar-collapse collapse">

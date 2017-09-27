@@ -14,6 +14,13 @@ namespace Rboard.Controllers
             ReportService = reportService;
         }
 
+        public override ViewResult View()
+        {
+            ViewData["Reports"] = ReportService.Reports;
+
+            return base.View();
+        }
+
         protected IActionResult Show(Report report)
         {
             ViewData["Reports"] = ReportService.Reports;

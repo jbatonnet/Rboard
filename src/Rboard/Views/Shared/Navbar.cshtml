@@ -39,44 +39,47 @@
 </ul>
 <ul class="nav navbar-nav navbar-right">
 
-    <li class="dropdown">
-
-        @{
-            DateTime? archiveDate = ViewData["ArchiveDate"] as DateTime?;
-            DateTime[] archiveDates = (ViewData["ArchiveDates"] as IEnumerable<DateTime>)?.ToArray();
-        }
-        
-        <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">@(archiveDate == null ? "Live" : $"Archive - {Utils.FormatDateTime(archiveDate.Value, "yyyy-MM-dd", "yyyy-MM-dd HH:mm")}") <span class="caret"></span></a>
-
-        <ul class="dropdown-menu">
-
-            <li><a asp-controller="Reports" asp-action="Show" asp-route-category="@Model.Category.ToLower()" asp-route-name="@Model.GetUrl()">Live</a></li>
-
-            @if (archiveDates != null)
-            {
-                foreach (DateTime date in archiveDates)
-                {
-                    string urlArchiveDate = Utils.FormatDateTime(date, "yyyy-MM-dd", "yyyy-MM-dd_HH-mm");
-                    string displayArchiveDate = Utils.FormatDateTime(date, "yyyy-MM-dd", "yyyy-MM-dd HH:mm");
-
-                    <li><a asp-controller="Archives" asp-action="Show" asp-route-category="@Model.Category.ToLower()" asp-route-name="@Model.GetUrl()" asp-route-date="@urlArchiveDate">@displayArchiveDate</a></li>
-                }
-            }
-        </ul>
-    </li>
-
-    @if (archiveDate == null)
+    @if (Model != null)
     {
-        @if (debugMode != true)
-        {
-            <li><a data-toggle="tooltip" data-placement="bottom" title="Toggle slideshow mode" asp-controller="Reports" asp-action="TogglePause" asp-route-category="@Model.Category.ToLower()" asp-route-name="@Model.GetUrl()"><i class="fa @(pauseMode == true ? "fa-play" : "fa-pause")"></i></a></li>
-        }
+        <li class="dropdown">
 
-        @if (debugBuild)
-        {
-            <li><a data-toggle="tooltip" data-placement="bottom" title="Toggle debug mode" asp-controller="Reports" asp-action="ToggleDebug" asp-route-category="@Model.Category.ToLower()" asp-route-name="@Model.GetUrl()"><i style="font-size: 18px" class="fa fa-bug"></i></a></li>
-        }
+            @{
+                DateTime? archiveDate = ViewData["ArchiveDate"] as DateTime?;
+                DateTime[] archiveDates = (ViewData["ArchiveDates"] as IEnumerable<DateTime>)?.ToArray();
+            }
+        
+            <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">@(archiveDate == null ? "Live" : $"Archive - {Utils.FormatDateTime(archiveDate.Value, "yyyy-MM-dd", "yyyy-MM-dd HH:mm")}") <span class="caret"></span></a>
 
-        <li><a data-toggle="tooltip" data-placement="bottom" title="Reload report" asp-controller="Reports" asp-action="ForceReload" asp-route-category="@Model.Category.ToLower()" asp-route-name="@Model.GetUrl()"><i style="font-size: 18px" class="fa fa-refresh"></i></a></li>
+            <ul class="dropdown-menu">
+
+                <li><a asp-controller="Reports" asp-action="Show" asp-route-category="@Model.Category.ToLower()" asp-route-name="@Model.GetUrl()">Live</a></li>
+
+                @if (archiveDates != null)
+                {
+                    foreach (DateTime date in archiveDates)
+                    {
+                        string urlArchiveDate = Utils.FormatDateTime(date, "yyyy-MM-dd", "yyyy-MM-dd_HH-mm");
+                        string displayArchiveDate = Utils.FormatDateTime(date, "yyyy-MM-dd", "yyyy-MM-dd HH:mm");
+
+                        <li><a asp-controller="Archives" asp-action="Show" asp-route-category="@Model.Category.ToLower()" asp-route-name="@Model.GetUrl()" asp-route-date="@urlArchiveDate">@displayArchiveDate</a></li>
+                    }
+                }
+            </ul>
+        </li>
+    
+        @if (archiveDate == null)
+        {
+            @if (debugMode != true)
+            {
+                <li><a data-toggle="tooltip" data-placement="bottom" title="Toggle slideshow mode" asp-controller="Reports" asp-action="TogglePause" asp-route-category="@Model.Category.ToLower()" asp-route-name="@Model.GetUrl()"><i class="fa @(pauseMode == true ? "fa-play" : "fa-pause")"></i></a></li>
+            }
+
+            @if (debugBuild)
+            {
+                <li><a data-toggle="tooltip" data-placement="bottom" title="Toggle debug mode" asp-controller="Reports" asp-action="ToggleDebug" asp-route-category="@Model.Category.ToLower()" asp-route-name="@Model.GetUrl()"><i style="font-size: 18px" class="fa fa-bug"></i></a></li>
+            }
+
+            <li><a data-toggle="tooltip" data-placement="bottom" title="Reload report" asp-controller="Reports" asp-action="ForceReload" asp-route-category="@Model.Category.ToLower()" asp-route-name="@Model.GetUrl()"><i style="font-size: 18px" class="fa fa-refresh"></i></a></li>
+        }
     }
 </ul>
