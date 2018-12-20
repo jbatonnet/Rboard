@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26730.16
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Rboard", "src\Rboard\Rboard.csproj", "{ACC7DCB5-5BD8-456C-8965-8C12ACBCDD66}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rboard.Server", "Rboard.Server\Rboard.Server.csproj", "{BBD17F04-A777-4BD1-BFBD-B3547D724C0D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,10 +11,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{ACC7DCB5-5BD8-456C-8965-8C12ACBCDD66}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{ACC7DCB5-5BD8-456C-8965-8C12ACBCDD66}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{ACC7DCB5-5BD8-456C-8965-8C12ACBCDD66}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{ACC7DCB5-5BD8-456C-8965-8C12ACBCDD66}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BBD17F04-A777-4BD1-BFBD-B3547D724C0D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BBD17F04-A777-4BD1-BFBD-B3547D724C0D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BBD17F04-A777-4BD1-BFBD-B3547D724C0D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BBD17F04-A777-4BD1-BFBD-B3547D724C0D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
