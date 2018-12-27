@@ -16,6 +16,7 @@ namespace Rboard.Server.Model
         public string Author { get; set; }
 
         public IDictionary<string, string> Configuration { get; } = new Dictionary<string, string>();
+        public IList<string> Libraries { get; } = new List<string>();
 
         public TimeSpan RefreshTime { get; set; } = TimeSpan.FromHours(1);
         public TimeSpan ArchiveTime { get; set; } = TimeSpan.FromDays(1);

@@ -12,21 +12,21 @@ namespace Rboard.Server.Controllers
     {
         public ArchivesController(ReportService reportService) : base(reportService) { }
 
-        public IActionResult Show(string category, string name, DateTime date)
+        public async Task<IActionResult> Show(string category, string name, DateTime date)
         {
             // Try to find the requested report
-            Report report = ReportService.FindReport(category, name);
+            Report report = await ReportService.FindReport(category, name);
             if (report == null)
                 return NotFound("Could not find the specified report");
 
             ViewData["ArchiveDate"] = date;
 
-            return base.Show(report);
+            return await base.Show(report);
         }
         public async Task<IActionResult> Raw(string category, string name, DateTime date)
         {
             // Try to find the requested report
-            Report report = ReportService.FindReport(category, name);
+            Report report = await ReportService.FindReport(category, name);
             if (report == null)
                 return NotFound("Could not find the specified report");
 

@@ -18,14 +18,6 @@ namespace Rboard.Server.Services
         private static readonly Regex ArchiveRegex = new Regex(@"^Archive_(?<Date>[0-9_-]+).zip$", RegexOptions.Compiled);
         private static readonly Regex ReportArchiveRegex = new Regex(@"^(?<Name>.*)_(?<Date>[0-9_-]+).html$", RegexOptions.Compiled);
 
-        public IEnumerable<Report> Reports
-        {
-            get
-            {
-                reloadTask.Wait();
-                return reportCategories.SelectMany(p => p.Value);
-            }
-        }
         public DirectoryInfo ReportsBaseDirectory { get; private set; } = new DirectoryInfo(".");
         public DirectoryInfo ArchiveDirectory { get; private set; } = new DirectoryInfo("Archives");
 
@@ -51,15 +43,20 @@ namespace Rboard.Server.Services
             Configuration.Reload();
             return reloadTask = ReloadConfiguration();
         }
-
-        public Report FindReport(string name)
+        public async Task<IEnumerable<Report>> GetReports()
         {
-            reloadTask.Wait();
-            return Reports.SingleOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+            await reloadTask;
+            return reportCategories.SelectMany(p => p.Value);
         }
-        public Report FindReport(string category, string name)
+
+        public async Task<Report> FindReport(string name)
         {
-            reloadTask.Wait();
+            await reloadTask;
+            return (await GetReports()).SingleOrDefault(r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+        }
+        public async Task<Report> FindReport(string category, string name)
+        {
+            await reloadTask;
 
             List<Report> categoryReports;
             if (!reportCategories.TryGetValue(category.ToLower(), out categoryReports))
@@ -92,6 +89,7 @@ namespace Rboard.Server.Services
                 {
                     string line = reader.ReadLine();
 
+                    // Read configuration
                     if (line == "---")
                     {
                         while (!reader.EndOfStream)
@@ -115,14 +113,29 @@ namespace Rboard.Server.Services
                             }
                         }
                     }
+
+                    // Auto detect needed libraries
+                    while (!reader.EndOfStream)
+                    {
+                        line = reader.ReadLine().Trim();
+
+                        if (line.StartsWith("library("))
+                        {
+                            string library = line.Substring(8);
+                            if (library.IndexOf(')') == library.Length - 1)
+                            {
+                                report.Libraries.Add(library.TrimEnd(')'));
+                            }
+                        }
+                    }
                 }
 
                 return report;
             });
         }
-        public string GetLastGeneratedReport(Report report)
+        public async Task<string> GetLastGeneratedReport(Report report)
         {
-            reloadTask.Wait();
+            await reloadTask;
 
             FileInfo reportInfo = new FileInfo(report.Path);
             FileInfo generatedReportInfo = new FileInfo(Path.Combine(reportInfo.Directory.FullName, report.GetGeneratedReportName()));
@@ -132,9 +145,9 @@ namespace Rboard.Server.Services
             else
                 return null;
         }
-        public Task<string> UpdateReport(Report report, bool force = false)
+        public async Task<string> UpdateReport(Report report, bool force = false)
         {
-            reloadTask.Wait();
+            await reloadTask;
 
             FileInfo reportInfo = new FileInfo(report.Path);
             FileInfo generatedReportInfo = new FileInfo(Path.Combine(reportInfo.Directory.FullName, report.GetGeneratedReportName()));
@@ -148,7 +161,7 @@ namespace Rboard.Server.Services
                 DateTime newArchiveDate = Utils.RoundDateTime(now, report.ArchiveTime);
 
                 if (newArchiveDate != oldArchiveDate)
-                    ArchiveReport(report).Wait();
+                    await ArchiveReport(report);
             }
 
             // Check if generation is needed
@@ -156,25 +169,25 @@ namespace Rboard.Server.Services
             {
                 Task<string> generationTask;
                 if (reportGenerationTasks.TryRemove(report, out generationTask))
-                    generationTask.Wait();
+                    await generationTask;
             }
 
             if (!force && generatedReportInfo.Exists && now < generatedReportInfo.LastWriteTime + report.RefreshTime)
-                return Task.FromResult(generatedReportInfo.FullName);
+                return generatedReportInfo.FullName;
             else
-                return reportGenerationTasks.GetOrAdd(report, GenerateReport);
+                return await reportGenerationTasks.GetOrAdd(report, GenerateReport);
         }
         private Task<string> GenerateReport(Report report)
         {
-            reloadTask.Wait();
-
-            Task<string> generationTask = Task.Run(() =>
+            Task<string> generationTask = Task.Run(async () =>
             {
+                await reloadTask;
+
                 FileInfo reportInfo = new FileInfo(report.Path);
                 FileInfo cleanReportInfo = new FileInfo(Path.Combine(reportInfo.Directory.FullName, Path.ChangeExtension(reportInfo.Name.Replace(" ", "_"), ".g.Rmd")));
                 FileInfo generatedReportInfo = new FileInfo(Path.Combine(reportInfo.Directory.FullName, report.GetGeneratedReportName()));
 
-                RService.WaitUntilReady();
+                await RService.WaitUntilReady();
 
                 Console.WriteLine("[{0}] Generating report {1}", DateTime.Now.ToShortTimeString(), reportInfo.Name);
 
@@ -216,8 +229,7 @@ namespace Rboard.Server.Services
                 // Render the report
                 try
                 {
-                    Task renderTask = RService.Render(cleanReportInfo.FullName, generatedReportInfo.FullName);
-                    renderTask.Wait();
+                    await RService.Render(cleanReportInfo.FullName, generatedReportInfo.FullName);
                 }
                 catch (Exception e)
                 {
@@ -239,54 +251,51 @@ namespace Rboard.Server.Services
 
         private async Task ArchiveReport(Report report)
         {
-            reloadTask.Wait();
+            await reloadTask;
 
-            await Task.Run(() =>
+            FileInfo reportInfo = new FileInfo(report.Path);
+            FileInfo generatedReportInfo = new FileInfo(Path.Combine(reportInfo.Directory.FullName, report.GetGeneratedReportName()));
+
+            DateTime now = DateTime.Now;
+
+            // Check if archiving is needed
+            if (generatedReportInfo.Exists)
             {
-                FileInfo reportInfo = new FileInfo(report.Path);
-                FileInfo generatedReportInfo = new FileInfo(Path.Combine(reportInfo.Directory.FullName, report.GetGeneratedReportName()));
+                DateTime oldArchiveDate = Utils.RoundDateTime(generatedReportInfo.LastWriteTime, report.ArchiveTime);
+                DateTime newArchiveDate = Utils.RoundDateTime(now, report.ArchiveTime);
 
-                DateTime now = DateTime.Now;
-
-                // Check if archiving is needed
-                if (generatedReportInfo.Exists)
+                if (newArchiveDate != oldArchiveDate)
                 {
-                    DateTime oldArchiveDate = Utils.RoundDateTime(generatedReportInfo.LastWriteTime, report.ArchiveTime);
-                    DateTime newArchiveDate = Utils.RoundDateTime(now, report.ArchiveTime);
+                    string archiveName = GetArchiveName(oldArchiveDate);
+                    FileInfo archiveInfo = new FileInfo(Path.Combine(ArchiveDirectory.FullName, archiveName));
 
-                    if (newArchiveDate != oldArchiveDate)
+                    if (!ArchiveDirectory.Exists)
+                        ArchiveDirectory.Create();
+
+                    if (!archiveInfo.Exists)
                     {
-                        string archiveName = GetArchiveName(oldArchiveDate);
-                        FileInfo archiveInfo = new FileInfo(Path.Combine(ArchiveDirectory.FullName, archiveName));
+                        using (FileStream archiveStream = archiveInfo.Create())
+                        using (ZipArchive archive = new ZipArchive(archiveStream, ZipArchiveMode.Create))
+                            archive.ToString();
+                    }
 
-                        if (!ArchiveDirectory.Exists)
-                            ArchiveDirectory.Create();
+                    using (FileStream archiveStream = archiveInfo.Open(FileMode.Open))
+                    using (ZipArchive archive = new ZipArchive(archiveStream, ZipArchiveMode.Update))
+                    {
+                        string reportArchiveName = report.GetArchivedReportName(oldArchiveDate);
 
-                        if (!archiveInfo.Exists)
+                        ZipArchiveEntry reportArchiveEntry = archive.GetEntry(reportArchiveName);
+                        if (reportArchiveEntry == null)
                         {
-                            using (FileStream archiveStream = archiveInfo.Create())
-                            using (ZipArchive archive = new ZipArchive(archiveStream, ZipArchiveMode.Create))
-                                archive.ToString();
-                        }
+                            reportArchiveEntry = archive.CreateEntry(reportArchiveName, CompressionLevel.Optimal);
 
-                        using (FileStream archiveStream = archiveInfo.Open(FileMode.Open))
-                        using (ZipArchive archive = new ZipArchive(archiveStream, ZipArchiveMode.Update))
-                        {
-                            string reportArchiveName = report.GetArchivedReportName(oldArchiveDate);
-
-                            ZipArchiveEntry reportArchiveEntry = archive.GetEntry(reportArchiveName);
-                            if (reportArchiveEntry == null)
-                            {
-                                reportArchiveEntry = archive.CreateEntry(reportArchiveName, CompressionLevel.Optimal);
-
-                                using (FileStream reportStream = generatedReportInfo.OpenRead())
-                                using (Stream reportArchiveStream = reportArchiveEntry.Open())
-                                    reportStream.CopyTo(reportArchiveStream);
-                            }
+                            using (FileStream reportStream = generatedReportInfo.OpenRead())
+                            using (Stream reportArchiveStream = reportArchiveEntry.Open())
+                                reportStream.CopyTo(reportArchiveStream);
                         }
                     }
                 }
-            });
+            }
 
             await CleanArchives(report);
         }
@@ -410,7 +419,9 @@ namespace Rboard.Server.Services
 
         private Task ReloadConfiguration()
         {
-            return Task.Run(() =>
+            Console.WriteLine("[{0}] Reloading configuration", DateTime.Now.ToShortTimeString());
+
+            return Task.Run(async () =>
             {
                 IConfigurationSection rboardSection = Configuration.GetSection("Rboard");
                 if (rboardSection != null)
@@ -439,10 +450,12 @@ namespace Rboard.Server.Services
 
                         foreach (IConfigurationSection child in categorySection.GetChildren())
                         {
-                            Task<Report> reportLoadingTask = LoadReport(category, child);
-                            reportLoadingTask.Wait();
+                            Report report = await LoadReport(category, child);
+                            categoryReports.Add(report);
 
-                            categoryReports.Add(reportLoadingTask.Result);
+                            Console.WriteLine("[{0}] Loaded report {1}", DateTime.Now.ToShortTimeString(), report.Name);
+
+                            RService.InstallPackages(report.Libraries.ToArray());
                         }
                     }
                 }

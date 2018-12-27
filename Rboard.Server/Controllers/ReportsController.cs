@@ -74,8 +74,10 @@ namespace Rboard.Server.Controllers
             reloadTask = ReloadConfiguration();
         }
 
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
+            ViewData["Reports"] = await ReportService.GetReports();
+
             return View();
         }
 
@@ -98,10 +100,10 @@ namespace Rboard.Server.Controllers
             return RedirectToAction(nameof(Show), new { category = category, name = name, force = true });
         }
 
-        public IActionResult Show(string category, string name, [FromQuery]bool force = false)
+        public async Task<IActionResult> Show(string category, string name, [FromQuery]bool force = false)
         {
             // Try to find the requested report
-            Report report = ReportService.FindReport(category, name);
+            Report report = await ReportService.FindReport(category, name);
             if (report == null)
                 return RedirectToAction(nameof(Index));
 
@@ -113,12 +115,12 @@ namespace Rboard.Server.Controllers
 
             ViewData["Force"] = force;
 
-            return base.Show(report);
+            return await base.Show(report);
         }
-        public IActionResult Raw(string category, string name, [FromQuery]bool force = false)
+        public async Task<IActionResult> Raw(string category, string name, [FromQuery]bool force = false)
         {
             // Try to find the requested report
-            Report report = ReportService.FindReport(category, name);
+            Report report = await ReportService.FindReport(category, name);
             if (report == null)
                 return RedirectToAction(nameof(Index));
 

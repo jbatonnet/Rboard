@@ -18,14 +18,17 @@ namespace Rboard.Server
 
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddSingleton<IConfigurationRoot>(Configuration);
+            services.AddSingleton(Configuration);
 
             // Add framework services.
             services.AddMvc();
 
             // Add reporting services.
-            services.AddSingleton<RService>();
-            services.AddSingleton<ReportService>();
+            RService rService = new RService(Configuration);
+            ReportService reportService = new ReportService(Configuration, rService);
+
+            services.AddSingleton(rService);
+            services.AddSingleton(reportService);
         }
 
         public void Configure(IApplicationBuilder app, IHostingEnvironment env)

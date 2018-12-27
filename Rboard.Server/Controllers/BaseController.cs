@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
 
 using Rboard.Server.Model;
 using Rboard.Server.Services;
@@ -14,16 +15,9 @@ namespace Rboard.Server.Controllers
             ReportService = reportService;
         }
 
-        public override ViewResult View()
+        protected async Task<IActionResult> Show(Report report)
         {
-            ViewData["Reports"] = ReportService.Reports;
-
-            return base.View();
-        }
-
-        protected IActionResult Show(Report report)
-        {
-            ViewData["Reports"] = ReportService.Reports;
+            ViewData["Reports"] = await ReportService.GetReports();
             ViewData["ArchiveDates"] = ReportService.EnumerateReportArchives(report, true);
 
             return View(report);

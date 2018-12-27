@@ -256,3 +256,7 @@ paket-files/
 /src/Rboard/Archives/
 samples/libraries/
 samples/*.html
+Rboard.Server/Archives/
+Rboard.Server/Samples/*.html
+Rboard.Server/Samples/*.g.Rmd
+Rboard.Server/Samples/libraries/
