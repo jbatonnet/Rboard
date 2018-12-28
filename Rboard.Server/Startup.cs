@@ -24,11 +24,8 @@ namespace Rboard.Server
             services.AddMvc();
 
             // Add reporting services.
-            RService rService = new RService(Configuration);
-            ReportService reportService = new ReportService(Configuration, rService);
-
-            services.AddSingleton(rService);
-            services.AddSingleton(reportService);
+            services.AddSingleton<RService>();
+            services.AddSingleton<ReportService>();
         }
 
         public void Configure(IApplicationBuilder app, IHostingEnvironment env)

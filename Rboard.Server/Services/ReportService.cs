@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 
 using Rboard.Server.Model;
+using Microsoft.Extensions.Logging;
 
 namespace Rboard.Server.Services
 {
@@ -22,6 +23,7 @@ namespace Rboard.Server.Services
         public DirectoryInfo ArchiveDirectory { get; private set; } = new DirectoryInfo("Archives");
 
         internal IConfigurationRoot Configuration { get; }
+        internal ILogger<ReportService> Logger { get; }
         internal RService RService { get; }
 
         private Dictionary<string, List<Report>> reportCategories = new Dictionary<string, List<Report>>();
@@ -29,9 +31,10 @@ namespace Rboard.Server.Services
 
         private Task reloadTask;
 
-        public ReportService(IConfigurationRoot configuration, RService rService)
+        public ReportService(IConfigurationRoot configuration, ILogger<ReportService> logger, RService rService)
         {
             Configuration = configuration;
+            Logger = logger;
             RService = rService;
 
             Configuration.GetReloadToken().RegisterChangeCallback(s => reloadTask = ReloadConfiguration(), null);
@@ -81,56 +84,68 @@ namespace Rboard.Server.Services
                 report.Path = Path.IsPathRooted(path) ? path : Path.Combine(ReportsBaseDirectory.FullName, path);
                 report.Name = name ?? Path.GetFileNameWithoutExtension(report.Path);
 
-                if (refreshTime != null) report.RefreshTime = Utils.ParseTime(refreshTime);
-                if (archiveTime != null) report.ArchiveTime = Utils.ParseTime(archiveTime);
-                if (deleteTime != null) report.DeleteTime = Utils.ParseTime(deleteTime);
+                Logger.LogDebug($"Loading report {report.Name}");
 
-                using (StreamReader reader = new StreamReader(report.Path))
+                try
                 {
-                    string line = reader.ReadLine();
+                    if (refreshTime != null) report.RefreshTime = Utils.ParseTime(refreshTime);
+                    if (archiveTime != null) report.ArchiveTime = Utils.ParseTime(archiveTime);
+                    if (deleteTime != null) report.DeleteTime = Utils.ParseTime(deleteTime);
 
-                    // Read configuration
-                    if (line == "---")
+                    using (StreamReader reader = new StreamReader(report.Path))
                     {
+                        string line = reader.ReadLine();
+
+                        // Read configuration
+                        if (line == "---")
+                        {
+                            while (!reader.EndOfStream)
+                            {
+                                line = reader.ReadLine();
+                                if (line == "---")
+                                    break;
+
+                                int separator = line.IndexOf(':');
+                                if (separator < 0)
+                                    break;
+
+                                string key = line.Remove(separator).Trim();
+                                string value = line.Substring(separator + 1).Trim();
+
+                                switch (key)
+                                {
+                                    case "orientation":
+                                        report.Configuration[key] = value;
+                                        break;
+                                }
+                            }
+                        }
+
+                        // Auto detect needed libraries
                         while (!reader.EndOfStream)
                         {
-                            line = reader.ReadLine();
-                            if (line == "---")
-                                break;
+                            line = reader.ReadLine().Trim();
 
-                            int separator = line.IndexOf(':');
-                            if (separator < 0)
-                                break;
-
-                            string key = line.Remove(separator).Trim();
-                            string value = line.Substring(separator + 1).Trim();
-
-                            switch (key)
+                            if (line.StartsWith("library("))
                             {
-                                case "orientation":
-                                    report.Configuration[key] = value;
-                                    break;
+                                string library = line.Substring(8);
+                                if (library.IndexOf(')') == library.Length - 1)
+                                {
+                                    report.Libraries.Add(library.TrimEnd(')'));
+                                }
                             }
                         }
                     }
 
-                    // Auto detect needed libraries
-                    while (!reader.EndOfStream)
-                    {
-                        line = reader.ReadLine().Trim();
+                    Logger.LogDebug($"Loaded report {report.Name}");
 
-                        if (line.StartsWith("library("))
-                        {
-                            string library = line.Substring(8);
-                            if (library.IndexOf(')') == library.Length - 1)
-                            {
-                                report.Libraries.Add(library.TrimEnd(')'));
-                            }
-                        }
-                    }
+                    return report;
                 }
-
-                return report;
+                catch (Exception e)
+                {
+                    Logger.LogError(e, $"Failed loading report {report.Name}");
+                    throw;
+                }
             });
         }
         public async Task<string> GetLastGeneratedReport(Report report)
@@ -189,7 +204,7 @@ namespace Rboard.Server.Services
 
                 await RService.WaitUntilReady();
 
-                Console.WriteLine("[{0}] Generating report {1}", DateTime.Now.ToShortTimeString(), reportInfo.Name);
+                Logger.LogInformation($"Generating report {reportInfo.Name}");
 
                 // Clean info in report
                 using (StreamReader reader = reportInfo.OpenText())
@@ -233,14 +248,14 @@ namespace Rboard.Server.Services
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine("[{0}] Error while generating report {1}: {2}", DateTime.Now.ToShortTimeString(), reportInfo.Name, e);
+                    Logger.LogError(e, $"Error while generating report {reportInfo.Name}");
                     throw;
                 }
 
                 // Clean everything
                 cleanReportInfo.Delete();
 
-                Console.WriteLine("[{0}] Generated report {1}", DateTime.Now.ToShortTimeString(), reportInfo.Name);
+                Logger.LogInformation($"Generated report {reportInfo.Name}");
 
                 return generatedReportInfo.FullName;
             });
@@ -419,10 +434,12 @@ namespace Rboard.Server.Services
 
         private Task ReloadConfiguration()
         {
-            Console.WriteLine("[{0}] Reloading configuration", DateTime.Now.ToShortTimeString());
+            ConcurrentBag<string> libraries = new ConcurrentBag<string>();
 
-            return Task.Run(async () =>
+            Task task = Task.Run(async () =>
             {
+                Logger.LogDebug("Reloading configuration");
+
                 IConfigurationSection rboardSection = Configuration.GetSection("Rboard");
                 if (rboardSection != null)
                 {
@@ -453,13 +470,25 @@ namespace Rboard.Server.Services
                             Report report = await LoadReport(category, child);
                             categoryReports.Add(report);
 
-                            Console.WriteLine("[{0}] Loaded report {1}", DateTime.Now.ToShortTimeString(), report.Name);
-
-                            RService.InstallPackages(report.Libraries.ToArray());
+                            foreach (string library in report.Libraries)
+                                libraries.Add(library);
                         }
                     }
                 }
+
+                Logger.LogDebug("Reloaded configuration");
             });
+
+            task.ContinueWith(async t =>
+            {
+                if (t.IsFaulted)
+                    return;
+
+                string[] distinctLibraries = libraries.Distinct().ToArray();
+                await RService.InstallPackages(distinctLibraries);
+            });
+
+            return task;
         }
     }
 

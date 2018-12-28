@@ -1,8 +1,12 @@
 ﻿using System;
 using System.IO;
 
+using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+using Rboard.Server.Services;
 
 namespace Rboard.Server
 {
@@ -20,9 +24,10 @@ namespace Rboard.Server
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
                 .AddEnvironmentVariables(prefix: "RBOARD")
+
                 .Build();
 
-            var host = new WebHostBuilder()
+            var host = WebHost.CreateDefaultBuilder(args)
                 .UseKestrel()
                 .UseConfiguration(config)
                 .UseContentRoot(Directory.GetCurrentDirectory())
@@ -30,6 +35,10 @@ namespace Rboard.Server
                 .UseStartup<Startup>()
                 .UseUrls($"http://*:{ServerPort}")
                 .Build();
+
+            // Preinitialize some services
+            host.Services.GetService<RService>();
+            host.Services.GetService<ReportService>();
 
             host.Run();
         }

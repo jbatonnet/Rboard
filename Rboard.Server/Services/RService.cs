@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 
 namespace Rboard.Server.Services
@@ -17,6 +18,7 @@ namespace Rboard.Server.Services
         public string[] RPackages { get; private set; } = new string[0];
 
         internal IConfigurationRoot Configuration { get; }
+        internal ILogger<RService> Logger { get; }
 
         private Task reloadTask;
         private Task packageInstallationTask;
@@ -24,9 +26,10 @@ namespace Rboard.Server.Services
         private object renderLock = new object();
         private object installationLock = new object();
 
-        public RService(IConfigurationRoot configuration)
+        public RService(IConfigurationRoot configuration, ILogger<RService> logger)
         {
             Configuration = configuration;
+            Logger = logger;
 
             Configuration.GetReloadToken().RegisterChangeCallback(s => reloadTask = ReloadConfiguration(), null);
             reloadTask = ReloadConfiguration();
@@ -126,6 +129,8 @@ namespace Rboard.Server.Services
         {
             await reloadTask;
 
+            Logger.LogTrace($"Checking package installation for {packageName}");
+
             string rScriptExecutable = GetRScriptExecutablePath();
             string arguments = $"-e \"if (!('{packageName}' %in% rownames(installed.packages()))) quit(save = 'no', status = -1)\"";
 
@@ -143,10 +148,17 @@ namespace Rboard.Server.Services
                 process.WaitForExit();
 
                 int exitCode = process.ExitCode;
+                bool? result = null;
 
-                if (exitCode == 0) return true;
-                if (exitCode == -1) return false;
-                if (exitCode == 255) return false;
+                if (exitCode == 0) result = true;
+                if (exitCode == -1) result = false;
+                if (exitCode == 255) result = false;
+
+                if (result != null)
+                {
+                    Logger.LogTrace($"Package {packageName} is {(result.Value ? "" : "not ")}installed");
+                    return result.Value;
+                }
 
                 string error = process.StandardError.ReadToEnd();
                 throw new Exception("Error while checking installed package " + packageName + ": " + error);
@@ -160,7 +172,7 @@ namespace Rboard.Server.Services
             await reloadTask;
 
             string rScriptExecutable = GetRScriptExecutablePath();
-            
+
             foreach (string packageName in packageNames)
             {
                 if (await IsPackageInstalled(packageName))
@@ -168,7 +180,7 @@ namespace Rboard.Server.Services
 
                 lock (installationLock)
                 {
-                    Console.WriteLine("[{0}] Installing package {1}", DateTime.Now.ToShortTimeString(), packageName);
+                    Logger.LogInformation($"Installing package {packageName}");
 
                     string arguments = $"-e \"if (!('{packageName}' %in% rownames(installed.packages()))) install.packages('{packageName}', repos='http://cran.rstudio.com/')\"";
 
@@ -189,7 +201,7 @@ namespace Rboard.Server.Services
                         throw new Exception("Error while installing package " + packageName + ": " + error);
                     }
 
-                    Console.WriteLine("[{0}] Installed package {1}", DateTime.Now.ToShortTimeString(), packageName);
+                    Logger.LogInformation($"Installed package {packageName}");
                 }
             }
         }
@@ -207,6 +219,8 @@ namespace Rboard.Server.Services
             string pandocExecutable = GetPandocExecutablePath();
             string rExecutable = GetRScriptExecutablePath();
 
+            string fileName = Path.GetFileName(sourcePath);
+
             string generationParameters = string.Format("-e \"Sys.setenv(RSTUDIO_PANDOC = '{2}')\" -e \"rmarkdown::render('{0}', output_file = '{1}', quiet = TRUE)\"",
                 sourcePath.Replace("\\", "\\\\"),
                 destinationPath.Replace("\\", "\\\\"),
@@ -223,6 +237,8 @@ namespace Rboard.Server.Services
 
             lock (renderLock)
             {
+                Logger.LogDebug($"Rendering file {fileName}");
+
                 Process process = Process.Start(processStartInfo);
                 process.WaitForExit();
 
@@ -231,6 +247,8 @@ namespace Rboard.Server.Services
                     string error = process.StandardError.ReadToEnd();
                     throw new Exception("Error while generating report " + Path.GetFileName(sourcePath) + ": " + error);
                 }
+
+                Logger.LogDebug($"Successfully rendered file {fileName}");
             }
         }
 
@@ -238,6 +256,8 @@ namespace Rboard.Server.Services
         {
             return Task.Run(() =>
             {
+                Logger.LogDebug("Reloading configuration");
+
                 IConfigurationSection rSection = Configuration.GetSection("R");
                 if (rSection != null)
                 {
@@ -259,6 +279,8 @@ namespace Rboard.Server.Services
                         }
                     }
                 }
+
+                Logger.LogDebug("Reloaded configuration");
             });
         }
     }

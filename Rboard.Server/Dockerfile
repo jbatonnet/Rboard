@@ -15,7 +15,7 @@ RUN apt-get update && \
 # Install base packages
 RUN Rscript -e "install.packages(c('rmarkdown', 'flexdashboard'), repos='http://cloud.r-project.org/')"
 
-# Install dev packages
+# Install common packages
 RUN Rscript -e "install.packages(c('highcharter', 'dplyr', 'viridisLite', 'forecast', 'treemap'), repos='http://cloud.r-project.org/')"
 
 EXPOSE 80
@@ -25,13 +25,13 @@ FROM microsoft/dotnet:2.1-sdk AS build
 WORKDIR /src
 COPY . .
 RUN dotnet restore -nowarn:msb3202,nu1503
-RUN dotnet build -c Debug -o /app
+RUN dotnet build -c Release -o /app
 
 FROM build AS publish
-RUN dotnet publish -c Debug -o /app
+RUN dotnet publish -c Release -o /app
 
 FROM base AS final
 WORKDIR /app
-COPY --from=publish /app /app
+COPY --from=publish /app .
 EXPOSE 80
 CMD ["dotnet", "Rboard.Server.dll"]
