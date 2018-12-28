@@ -6,10 +6,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Samples\**" />
-    <Content Remove="Samples\**" />
-    <EmbeddedResource Remove="Samples\**" />
-    <None Remove="Samples\**" />
+    <Compile Remove="Archives\**" />
+    <Compile Remove="Reports\**" />
+    <Content Remove="Archives\**" />
+    <Content Remove="Reports\**" />
+    <EmbeddedResource Remove="Archives\**" />
+    <EmbeddedResource Remove="Reports\**" />
+    <None Remove="Archives\**" />
+    <None Remove="Reports\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -17,10 +21,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Samples\*.Rmd">
+    <Content Include="Reports\*.Rmd">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Remove="Samples\*.g.Rmd" />
+    <Content Remove="Reports\*.g.Rmd" />
   </ItemGroup>
 
   <ItemGroup>

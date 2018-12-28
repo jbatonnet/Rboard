@@ -33,5 +33,7 @@ RUN dotnet publish -c Release -o /app
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app .
+VOLUME /app/Archives
+VOLUME /app/Reports
 EXPOSE 80
 CMD ["dotnet", "Rboard.Server.dll"]

@@ -20,16 +20,20 @@ namespace Rboard.Server
             if (!string.IsNullOrEmpty(serverPortText) && ushort.TryParse(serverPortText, out ushort serverPort))
                 ServerPort = serverPort;
 
-            var config = new ConfigurationBuilder()
+            var configuration = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
                 .AddEnvironmentVariables(prefix: "RBOARD")
-
                 .Build();
 
             var host = WebHost.CreateDefaultBuilder(args)
                 .UseKestrel()
-                .UseConfiguration(config)
+                .ConfigureAppConfiguration((hostingContext, configurationBuilder) =>
+                {
+                    var environment = hostingContext.HostingEnvironment;
+                    configurationBuilder.AddJsonFile($"appsettings.{environment.EnvironmentName}.json", optional: true, reloadOnChange: true);
+                })
+                .UseConfiguration(configuration)
                 .UseContentRoot(Directory.GetCurrentDirectory())
                 .UseIISIntegration()
                 .UseStartup<Startup>()
