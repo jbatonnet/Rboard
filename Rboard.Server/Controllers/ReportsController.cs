@@ -140,7 +140,7 @@ namespace Rboard.Server.Controllers
 #if DEBUG
                     string generatedReport = null;
 #else
-                    string generatedReport = force ? null : await ReportService.GetLastGeneratedReport(report);
+                    string generatedReport = force ? null : await ReportService.GetLastGeneratedReport(rReport);
 #endif
 
                     if (generatedReport == null)
