@@ -4,13 +4,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 using Rboard.Server.Model;
-using Microsoft.Extensions.Logging;
 
 namespace Rboard.Server.Services
 {
@@ -27,7 +27,7 @@ namespace Rboard.Server.Services
         internal RService RService { get; }
 
         private Dictionary<string, List<Report>> reportCategories = new Dictionary<string, List<Report>>();
-        private ConcurrentDictionary<Report, Task<string>> reportGenerationTasks = new ConcurrentDictionary<Report, Task<string>>();
+        private ConcurrentDictionary<RReport, Task<string>> reportGenerationTasks = new ConcurrentDictionary<RReport, Task<string>>();
 
         private Task reloadTask;
 
@@ -74,81 +74,100 @@ namespace Rboard.Server.Services
             {
                 string name = reportSection.GetValue<string>("Name");
                 string path = reportSection.GetValue<string>("Path");
+                string url = reportSection.GetValue<string>("Url");
                 string refreshTime = reportSection.GetValue<string>("RefreshTime");
                 string archiveTime = reportSection.GetValue<string>("ArchiveTime");
                 string deleteTime = reportSection.GetValue<string>("DeleteTime");
 
-                Report report = new Report();
-
-                report.Category = category;
-                report.Path = Path.IsPathRooted(path) ? path : Path.Combine(ReportsBaseDirectory.FullName, path);
-                report.Name = name ?? Path.GetFileNameWithoutExtension(report.Path);
-
-                Logger.LogDebug($"Loading report {report.Name}");
+                Logger.LogDebug($"Loading report {name}");
 
                 try
                 {
-                    if (refreshTime != null) report.RefreshTime = Utils.ParseTime(refreshTime);
-                    if (archiveTime != null) report.ArchiveTime = Utils.ParseTime(archiveTime);
-                    if (deleteTime != null) report.DeleteTime = Utils.ParseTime(deleteTime);
+                    Report report = null;
 
-                    using (StreamReader reader = new StreamReader(report.Path))
+                    if (!string.IsNullOrEmpty(path))
                     {
-                        string line = reader.ReadLine();
+                        RReport rReport = new RReport();
+                        report = rReport;
 
-                        // Read configuration
-                        if (line == "---")
+                        rReport.Path = Path.IsPathRooted(path) ? path : Path.Combine(ReportsBaseDirectory.FullName, path);
+
+                        if (refreshTime != null) rReport.RefreshTime = Utils.ParseTime(refreshTime);
+                        if (archiveTime != null) rReport.ArchiveTime = Utils.ParseTime(archiveTime);
+                        if (deleteTime != null) rReport.DeleteTime = Utils.ParseTime(deleteTime);
+
+                        using (StreamReader reader = new StreamReader(rReport.Path))
                         {
-                            while (!reader.EndOfStream)
+                            string line = reader.ReadLine();
+
+                            // Read configuration
+                            if (line == "---")
                             {
-                                line = reader.ReadLine();
-                                if (line == "---")
-                                    break;
-
-                                int separator = line.IndexOf(':');
-                                if (separator < 0)
-                                    break;
-
-                                string key = line.Remove(separator).Trim();
-                                string value = line.Substring(separator + 1).Trim();
-
-                                switch (key)
+                                while (!reader.EndOfStream)
                                 {
-                                    case "orientation":
-                                        report.Configuration[key] = value;
+                                    line = reader.ReadLine();
+                                    if (line == "---")
                                         break;
+
+                                    int separator = line.IndexOf(':');
+                                    if (separator < 0)
+                                        break;
+
+                                    string key = line.Remove(separator).Trim();
+                                    string value = line.Substring(separator + 1).Trim();
+
+                                    switch (key)
+                                    {
+                                        case "orientation":
+                                            rReport.Configuration[key] = value;
+                                            break;
+                                    }
                                 }
                             }
-                        }
 
-                        // Auto detect needed libraries
-                        while (!reader.EndOfStream)
-                        {
-                            line = reader.ReadLine().Trim();
-
-                            if (line.StartsWith("library("))
+                            // Auto detect needed libraries
+                            while (!reader.EndOfStream)
                             {
-                                string library = line.Substring(8);
-                                if (library.IndexOf(')') == library.Length - 1)
+                                line = reader.ReadLine().Trim();
+
+                                if (line.StartsWith("library("))
                                 {
-                                    report.Libraries.Add(library.TrimEnd(')'));
+                                    string library = line.Substring(8);
+                                    if (library.IndexOf(')') == library.Length - 1)
+                                    {
+                                        rReport.Libraries.Add(library.TrimEnd(')'));
+                                    }
                                 }
                             }
                         }
                     }
+                    else if (!string.IsNullOrEmpty(url))
+                    {
+                        ExternalReport externalReport = new ExternalReport();
+                        report = externalReport;
 
-                    Logger.LogDebug($"Loaded report {report.Name}");
+                        externalReport.Url = url;
+                    }
+                    else
+                    {
+                        throw new Exception("Specified report is not recognized");
+                    }
+
+                    report.Category = category;
+                    report.Name = name;
+
+                    Logger.LogDebug($"Loaded report {name}");
 
                     return report;
                 }
                 catch (Exception e)
                 {
-                    Logger.LogError(e, $"Failed loading report {report.Name}");
+                    Logger.LogError(e, $"Failed loading report {name}");
                     throw;
                 }
             });
         }
-        public async Task<string> GetLastGeneratedReport(Report report)
+        public async Task<string> GetLastGeneratedReport(RReport report)
         {
             await reloadTask;
 
@@ -160,7 +179,7 @@ namespace Rboard.Server.Services
             else
                 return null;
         }
-        public async Task<string> UpdateReport(Report report, bool force = false)
+        public async Task<string> UpdateReport(RReport report, bool force = false)
         {
             await reloadTask;
 
@@ -192,7 +211,7 @@ namespace Rboard.Server.Services
             else
                 return await reportGenerationTasks.GetOrAdd(report, GenerateReport);
         }
-        private Task<string> GenerateReport(Report report)
+        private Task<string> GenerateReport(RReport report)
         {
             Task<string> generationTask = Task.Run(async () =>
             {
@@ -264,7 +283,7 @@ namespace Rboard.Server.Services
             return generationTask;
         }
 
-        private async Task ArchiveReport(Report report)
+        private async Task ArchiveReport(RReport report)
         {
             await reloadTask;
 
@@ -314,7 +333,7 @@ namespace Rboard.Server.Services
 
             await CleanArchives(report);
         }
-        public Task CleanArchives(Report report)
+        public Task CleanArchives(RReport report)
         {
             return Task.Run(() =>
             {
@@ -366,7 +385,7 @@ namespace Rboard.Server.Services
                 }
             });
         }
-        public IEnumerable<DateTime> EnumerateReportArchives(Report report, bool fileCheck = false)
+        public IEnumerable<DateTime> EnumerateReportArchives(RReport report, bool fileCheck = false)
         {
             DateTime archiveDate = Utils.RoundDateTime(DateTime.Now, report.ArchiveTime) - report.ArchiveTime;
             DateTime deletionDate = DateTime.Now - report.DeleteTime;
@@ -400,7 +419,7 @@ namespace Rboard.Server.Services
                     yield return archiveDate;
             }
         }
-        public Task<string> GetReportArchive(Report report, DateTime date)
+        public Task<string> GetReportArchive(RReport report, DateTime date)
         {
             return Task.Run(() =>
             {
@@ -470,8 +489,11 @@ namespace Rboard.Server.Services
                             Report report = await LoadReport(category, child);
                             categoryReports.Add(report);
 
-                            foreach (string library in report.Libraries)
-                                libraries.Add(library);
+                            if (report is RReport rReport)
+                            {
+                                foreach (string library in rReport.Libraries)
+                                    libraries.Add(library);
+                            }
                         }
                     }
                 }
@@ -499,11 +521,11 @@ namespace Rboard.Server.Services
             return report.Name.Replace(" ", "-").Replace("--", "-").Replace("--", "-").ToLower();
         }
 
-        public static string GetGeneratedReportName(this Report report)
+        public static string GetGeneratedReportName(this RReport report)
         {
             return Path.ChangeExtension(Path.GetFileName(report.Path).Replace(" ", "_"), "html");
         }
-        public static string GetArchivedReportName(this Report report, DateTime date)
+        public static string GetArchivedReportName(this RReport report, DateTime date)
         {
             return string.Format("{0}_{1}.html", Path.GetFileNameWithoutExtension(report.Path).Replace(" ", "_"), Utils.FormatDateTime(date, "yyyy-MM-dd", "yyyy-MM-dd_HH-mm"));
         }

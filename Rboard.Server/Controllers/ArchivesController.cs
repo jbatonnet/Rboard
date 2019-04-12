@@ -30,11 +30,20 @@ namespace Rboard.Server.Controllers
             if (report == null)
                 return NotFound("Could not find the specified report");
 
-            string content = await ReportService.GetReportArchive(report, date);
-            if (content == null)
-                return NotFound("Could not find the specified archive");
+            if (report is RReport rReport)
+            {
+                string content = await ReportService.GetReportArchive(rReport, date);
+                if (content == null)
+                    return NotFound("Could not find the specified archive");
 
-            return Content(content, "text/html");
+                return Content(content, "text/html");
+            }
+            else if (report is ExternalReport externalReport)
+            {
+                return Redirect(externalReport.Url);
+            }
+            else
+                return NotFound();
         }
     }
 }

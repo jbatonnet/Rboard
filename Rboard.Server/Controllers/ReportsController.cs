@@ -124,32 +124,39 @@ namespace Rboard.Server.Controllers
             if (report == null)
                 return RedirectToAction(nameof(Index));
 
-            // Update the specified report
-            Task<string> reportUpdateTask = ReportService.UpdateReport(report, force);
+            if (report is RReport rReport)
+            {
+                // Update the specified report
+                Task<string> reportUpdateTask = ReportService.UpdateReport(rReport, force);
 
-            // Send the last version to the client
-            if (reportUpdateTask.IsCompleted)
-            {
-                using (StreamReader reader = new StreamReader(reportUpdateTask.Result))
-                    return Content(reader.ReadToEnd(), "text/html");
-            }
-            else
-            {
+                // Send the last version to the client
+                if (reportUpdateTask.IsCompleted)
+                {
+                    using (StreamReader reader = new StreamReader(reportUpdateTask.Result))
+                        return Content(reader.ReadToEnd(), "text/html");
+                }
+                else
+                {
 #if DEBUG
-                string generatedReport = null;
+                    string generatedReport = null;
 #else
-                string generatedReport = force ? null : await ReportService.GetLastGeneratedReport(report);
+                    string generatedReport = force ? null : await ReportService.GetLastGeneratedReport(report);
 #endif
 
-                if (generatedReport == null)
-                {
-                    reportUpdateTask.Wait();
-                    generatedReport = reportUpdateTask.Result;
-                }
+                    if (generatedReport == null)
+                    {
+                        reportUpdateTask.Wait();
+                        generatedReport = reportUpdateTask.Result;
+                    }
 
-                using (StreamReader reader = new StreamReader(generatedReport))
-                    return Content(reader.ReadToEnd(), "text/html");
+                    using (StreamReader reader = new StreamReader(generatedReport))
+                        return Content(reader.ReadToEnd(), "text/html");
+                }
             }
+            else if (report is ExternalReport externalReport)
+                return Redirect(externalReport.Url);
+            else
+                return RedirectToAction(nameof(Index));
         }
 
         private Task ReloadConfiguration()

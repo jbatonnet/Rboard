@@ -1,4 +1,7 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Linq;
+using System.Threading.Tasks;
+
 using Microsoft.AspNetCore.Mvc;
 
 using Rboard.Server.Model;
@@ -18,7 +21,7 @@ namespace Rboard.Server.Controllers
         protected async Task<IActionResult> Show(Report report)
         {
             ViewData["Reports"] = await ReportService.GetReports();
-            ViewData["ArchiveDates"] = ReportService.EnumerateReportArchives(report, true);
+            ViewData["ArchiveDates"] = report is RReport rReport ? ReportService.EnumerateReportArchives(rReport, true) : Enumerable.Empty<DateTime>();
 
             return View(report);
         }
