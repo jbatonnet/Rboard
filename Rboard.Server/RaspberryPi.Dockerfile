@@ -1,4 +1,4 @@
-﻿FROM microsoft/dotnet:2.1-aspnetcore-runtime AS base
+﻿FROM mcr.microsoft.com/dotnet/core/aspnet:2.1-stretch-slim-arm32v7 AS base
 
 # Install R
 RUN apt-get update && \
@@ -16,7 +16,7 @@ RUN apt-get update && \
 RUN Rscript -e "install.packages(c('rmarkdown', 'flexdashboard'), repos='http://cloud.r-project.org/')"
 
 # Install common packages
-RUN Rscript -e "install.packages(c('highcharter', 'dplyr', 'viridisLite', 'forecast', 'treemap'), repos='http://cloud.r-project.org/')"
+RUN Rscript -e "install.packages(c('highcharter', 'dplyr', 'viridisLite', 'forecast', 'treemap', 'httr', 'reticulate', 'rjson'), repos='http://cloud.r-project.org/')"
 
 EXPOSE 80
 WORKDIR /app
@@ -28,7 +28,7 @@ RUN dotnet restore -nowarn:msb3202,nu1503
 RUN dotnet build -c Release -o /app
 
 FROM build AS publish
-RUN dotnet publish -c Release -o /app
+RUN dotnet publish -c Release -r linux-arm -o /app
 
 FROM base AS final
 WORKDIR /app
@@ -36,4 +36,4 @@ COPY --from=publish /app .
 VOLUME /app/Archives
 VOLUME /app/Reports
 EXPOSE 80
-CMD ["dotnet", "Rboard.Server.dll"]
+CMD ["./Rboard.Server"]
